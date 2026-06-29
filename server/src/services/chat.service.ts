@@ -64,7 +64,7 @@ export class ChatService {
       contextString = `Linked Platforms: CF(${user.linkedCodeforcesHandle}), LC(${user.linkedLeetcodeUsername}), AC(${user.linkedAtcoderUsername})
 CQI Score: ${Math.round(cqi)}
 Recent Submissions:
-${user.submissions.map(s => `- [${s.platform}] ${s.problemName}: ${s.verdict} (${s.language})`).join('\n')}`;
+${user.submissions.map((s: any) => `- [${s.platform}] ${s.problemName}: ${s.verdict} (${s.language})`).join('\n')}`;
     }
 
     // Include attachments in the context
@@ -86,7 +86,7 @@ ${user.submissions.map(s => `- [${s.platform}] ${s.problemName}: ${s.verdict} ($
     });
 
     // Prepare messages for AI (last 20 messages for context window limit)
-    const recentMessages = conversation.messages.slice(-20).map(m => ({
+    const recentMessages = conversation.messages.slice(-20).map((m: any) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content
     }));

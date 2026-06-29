@@ -3,6 +3,7 @@ import { Toaster } from '@/components/ui/toaster';
 import Header from '@/components/layout/header';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
+import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
   title: 'ALL IN',

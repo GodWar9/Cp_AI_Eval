@@ -27,7 +27,7 @@ router.post('/conversations', async (req: AuthRequest, res: Response) => {
 
 router.get('/conversations/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const convo = await chatService.getConversation(req.user!.id, req.params.id);
+    const convo = await chatService.getConversation(req.user!.id, req.params.id as string);
     res.json(convo);
   } catch (error: any) {
     res.status(404).json({ error: error.message });
@@ -42,7 +42,7 @@ router.post('/conversations/:id/messages', async (req: AuthRequest, res: Respons
       return;
     }
     
-    const message = await chatService.sendMessage(req.user!.id, req.params.id, content);
+    const message = await chatService.sendMessage(req.user!.id, req.params.id as string, content);
     res.json(message);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -56,7 +56,7 @@ router.post('/conversations/:id/attachments', upload.single('file'), async (req:
       return;
     }
 
-    const attachment = await chatService.addAttachment(req.user!.id, req.params.id, req.file);
+    const attachment = await chatService.addAttachment(req.user!.id, req.params.id as string, req.file);
     res.status(201).json(attachment);
   } catch (error: any) {
     res.status(500).json({ error: error.message });

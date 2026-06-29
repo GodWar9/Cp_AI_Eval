@@ -26,7 +26,7 @@ router.get('/', async (req: Request, res: Response) => {
     });
 
     // Format the response for the frontend
-    const leaderboard = users.map(user => {
+    const leaderboard = users.map((user: any) => {
       const latestScore = user.cqiScores[0];
       return {
         id: user.id,
@@ -38,10 +38,10 @@ router.get('/', async (req: Request, res: Response) => {
     });
 
     // Sort by score descending
-    leaderboard.sort((a, b) => b.score - a.score);
+    leaderboard.sort((a: any, b: any) => b.score - a.score);
 
     // Add rank
-    const rankedLeaderboard = leaderboard.map((item, index) => ({
+    const rankedLeaderboard = leaderboard.map((item: any, index: number) => ({
       ...item,
       rank: skip + index + 1
     }));

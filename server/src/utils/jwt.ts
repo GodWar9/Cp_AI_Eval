@@ -7,15 +7,15 @@ export interface JwtPayload {
   userId: string;
 }
 
-export function generateAccessToken(userId: string): string {
+export function generateAccessToken(userId: string) {
   return jwt.sign({ userId }, ACCESS_SECRET, {
-    expiresIn: process.env.ACCESS_TOKEN_EXPIRY || '15m',
+    expiresIn: (process.env.JWT_ACCESS_EXPIRES_IN || '15m') as any
   });
 }
 
-export function generateRefreshToken(userId: string): string {
+export function generateRefreshToken(userId: string) {
   return jwt.sign({ userId }, REFRESH_SECRET, {
-    expiresIn: `${process.env.REFRESH_TOKEN_EXPIRY_DAYS || 30}d`,
+    expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any
   });
 }
 
