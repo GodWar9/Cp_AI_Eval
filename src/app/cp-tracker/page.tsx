@@ -1,105 +1,122 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { apiFetch } from '@/lib/api';
+import ContestHeatmap from '@/components/cp-tracker/contest-heatmap';
+import ContestTimeline from '@/components/cp-tracker/contest-timeline';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ContestHeatmap } from '@/components/cp-tracker/contest-heatmap';
-import { ContestTimeline } from '@/components/cp-tracker/contest-timeline';
+import { ExternalLink, Loader2, Code2, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
-const trackedSubmissions = [
-  { id: 1, problem: 'Two Sum', platform: 'LeetCode', date: '2024-07-20', rating: 4.5, status: 'Accepted' },
-  { id: 2, problem: 'A. Watermelon', platform: 'Codeforces', date: '2024-07-19', rating: 3.2, status: 'Accepted' },
-  { id: 3, problem: 'Regular Bracket Sequences', platform: 'Codeforces', date: '2024-07-26', rating: 4.1, status: 'Accepted' },
-  { id: 4, problem: 'Longest Substring Without Repeating Characters', platform: 'LeetCode', date: '2024-07-25', rating: 4.8, status: 'Accepted' },
-  { id: 5, problem: 'A. Way Too Long Words', platform: 'Codeforces', date: '2024-07-17', rating: 3.1, status: 'Time Limit Exceeded' },
-  { id: 6, problem: 'B. Drinks', platform: 'Codeforces', date: '2024-07-24', rating: 3.5, status: 'Wrong Answer' },
-  { id: 7, problem: 'Median of Two Sorted Arrays', platform: 'LeetCode', date: '2024-07-14', rating: 4.9, status: 'Accepted' },
-  { id: 8, problem: 'C. Word Game', platform: 'Codeforces', date: '2024-07-23', rating: 3.9, status: 'Accepted' },
-  { id: 9, problem: 'Reverse Integer', platform: 'LeetCode', date: '2024-07-12', rating: 4.1, status: 'Accepted' },
-  { id: 10, problem: 'D. Odd Queries', platform: 'Codeforces', date: '2024-07-22', rating: 4.2, status: 'Accepted' },
-  { id: 11, problem: 'String to Integer (atoi)', platform: 'LeetCode', date: '2024-07-10', rating: 3.8, status: 'Wrong Answer' },
-  { id: 12, problem: 'A. Bit++', platform: 'Codeforces', date: '2024-07-09', rating: 3.3, status: 'Accepted' },
-  { id: 13, problem: 'Palindrome Number', platform: 'LeetCode', date: '2024-07-08', rating: 4.0, status: 'Accepted' },
-  { id: 14, problem: 'A. Petya and Strings', platform: 'Codeforces', date: '2024-07-07', rating: 3.7, status: 'Accepted' },
-  { id: 15, problem: 'Container With Most Water', platform: 'LeetCode', date: '2024-07-06', rating: 4.7, status: 'Time Limit Exceeded' },
-  { id: 16, problem: '3Sum', platform: 'LeetCode', date: '2024-07-05', rating: 4.6, status: 'Accepted' },
-  { id: 17, problem: 'B. Following the String', platform: 'Codeforces', date: '2024-07-04', rating: 3.8, status: 'Accepted' },
-  { id: 18, problem: 'Valid Parentheses', platform: 'LeetCode', date: '2024-07-03', rating: 4.3, status: 'Accepted' },
-  { id: 19, problem: 'A. Theatre Square', platform: 'Codeforces', date: '2024-07-02', rating: 3.0, status: 'Wrong Answer' },
-  { id: 20, problem: 'Merge Two Sorted Lists', platform: 'LeetCode', date: '2024-07-01', rating: 4.4, status: 'Accepted' },
-  { id: 21, problem: 'C. Can I Square?', platform: 'Codeforces', date: '2024-06-30', rating: 4.0, status: 'Accepted' },
-  { id: 22, problem: 'Generate Parentheses', platform: 'LeetCode', date: '2024-06-29', rating: 4.7, status: 'Accepted' },
-  { id: 23, problem: 'A. Helpful Maths', platform: 'Codeforces', date: '2024-06-28', rating: 3.6, status: 'Accepted' },
-];
+export default function CPTrackerPage() {
+  const { user } = useAuth();
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-const StatusBadge = ({ status }: { status: string }) => {
-  switch (status) {
-    case 'Accepted':
-      return <Badge variant="default" className="bg-green-500/80 hover:bg-green-500/90 text-white">Accepted</Badge>;
-    case 'Time Limit Exceeded':
-      return <Badge variant="destructive" className="bg-yellow-500/80 hover:bg-yellow-500/90 text-white">TLE</Badge>;
-    case 'Wrong Answer':
-      return <Badge variant="destructive" className="bg-red-500/80 hover:bg-red-500/90 text-white">WA</Badge>;
-    default:
-      return <Badge variant="outline">{status}</Badge>;
+  useEffect(() => {
+    async function loadData() {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+      try {
+        const res = await apiFetch(`/profile/${user.id}/submissions`);
+        setSubmissions(res);
+      } catch (error) {
+        console.error('Failed to load submissions', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadData();
+  }, [user]);
+
+  if (!user) {
+    return (
+      <div className="container mx-auto flex h-[80vh] flex-col items-center justify-center space-y-4">
+        <AlertCircle className="h-12 w-12 text-muted-foreground" />
+        <h2 className="font-headline text-2xl font-bold">Authentication Required</h2>
+        <p className="text-muted-foreground">Please log in to view your CP Tracker.</p>
+        <Button asChild>
+          <Link href="/login">Log In</Link>
+        </Button>
+      </div>
+    );
   }
-};
 
-export default function CpTrackerPage() {
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
-    <div className="container mx-auto py-10 px-4">
-      <header className="text-center mb-12">
-        <h1 className="font-headline text-4xl sm:text-5xl font-bold tracking-tight">CP Tracker</h1>
-        <p className="mt-4 text-lg text-muted-foreground">
-          Monitor your competitive programming submissions and ratings.
-        </p>
-      </header>
-      
-      <div className="grid gap-8 max-w-7xl mx-auto lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-8">
-            <Card>
-            <CardHeader>
-                <CardTitle className="font-headline">Recent Submissions</CardTitle>
-                <CardDescription>A log of your recent activity on various platforms.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Table>
-                <TableHeader>
-                    <TableRow>
-                    <TableHead>Problem</TableHead>
-                    <TableHead>Platform</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Rating</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {trackedSubmissions.map((sub) => (
-                    <TableRow key={sub.id} className="transition-colors hover:bg-muted/50">
-                        <TableCell className="font-medium">{sub.problem}</TableCell>
-                        <TableCell>{sub.platform}</TableCell>
-                        <TableCell className="text-muted-foreground">{sub.date}</TableCell>
-                        <TableCell>
-                        <StatusBadge status={sub.status} />
-                        </TableCell>
-                        <TableCell className="text-right font-mono font-bold text-lg">{sub.rating.toFixed(1)}</TableCell>
-                    </TableRow>
-                    ))}
-                </TableBody>
-                </Table>
-            </CardContent>
-            </Card>
+    <div className="container py-8 mx-auto max-w-6xl space-y-8">
+      <div>
+        <h1 className="font-headline text-4xl font-bold tracking-tight">CP Tracker</h1>
+        <p className="text-muted-foreground mt-2">Monitor your progress across Codeforces, LeetCode, and AtCoder.</p>
+      </div>
 
-            <Card>
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* Main Content Area */}
+        <div className="lg:col-span-2 space-y-8">
+          <ContestHeatmap submissions={submissions} />
+          
+          <Card>
             <CardHeader>
-                <CardTitle className="font-headline">Contest Heatmap</CardTitle>
-                <CardDescription>Your submission activity over the last year.</CardDescription>
+              <CardTitle>Recent Submissions</CardTitle>
+              <CardDescription>Your latest activity across platforms</CardDescription>
             </CardHeader>
             <CardContent>
-                <ContestHeatmap />
+              <div className="space-y-4">
+                {submissions.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-8 text-center">
+                    <p className="text-muted-foreground">No submissions found.</p>
+                    <p className="text-sm text-muted-foreground mt-1">Link your accounts in your profile to start tracking.</p>
+                    <Button variant="outline" className="mt-4" asChild>
+                      <Link href="/profile">Link Platforms</Link>
+                    </Button>
+                  </div>
+                ) : (
+                  submissions.map((sub, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50">
+                      <div className="flex items-center gap-4">
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                          sub.platform === 'leetcode' ? 'bg-yellow-500/10 text-yellow-500' :
+                          sub.platform === 'codeforces' ? 'bg-blue-500/10 text-blue-500' :
+                          'bg-red-500/10 text-red-500'
+                        }`}>
+                          <Code2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{sub.problemName}</p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span className="capitalize">{sub.platform}</span>
+                            <span>•</span>
+                            <span>{new Date(sub.submittedAt).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <Badge variant={sub.verdict === 'Accepted' || sub.verdict === 'OK' || sub.verdict === 'AC' ? 'default' : 'destructive'} 
+                             className={sub.verdict === 'Accepted' || sub.verdict === 'OK' || sub.verdict === 'AC' ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : ''}>
+                        {sub.verdict}
+                      </Badge>
+                    </div>
+                  ))
+                )}
+              </div>
             </CardContent>
-            </Card>
+          </Card>
         </div>
-        <div className="lg:col-span-1">
-            <ContestTimeline />
+
+        {/* Sidebar */}
+        <div className="space-y-8">
+          <ContestTimeline />
         </div>
       </div>
     </div>

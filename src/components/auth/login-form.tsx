@@ -7,8 +7,8 @@ import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useAuth } from '@/context/AuthContext';
+import { apiFetch } from '@/lib/api';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -47,7 +47,11 @@ export function LoginForm() {
   async function onSubmit(values: FormValues) {
     setIsLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, values.email, values.password);
+      const response = await apiFetch('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify(values)
+      });
+      await auth.login(response.accessToken);
       router.push('/profile');
     } catch (error: any) {
       console.error(error);

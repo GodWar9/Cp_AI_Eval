@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 
 function useAnimatedValue(endValue: number, duration: number = 1500) {
   const [currentValue, setCurrentValue] = useState(0);
-  const frameRef = useRef<number>();
+  const frameRef = useRef<number>(0);
 
   useEffect(() => {
     let startValue = 0;

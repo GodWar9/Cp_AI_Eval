@@ -1,0 +1,218 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USERS
+// ============================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  displayName   String   @map("display_name")
+  avatarUrl     String?  @map("avatar_url")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Linked platform handles
+  linkedLeetcodeUsername  String? @map("linked_leetcode_username")
+  linkedCodeforcesHandle String? @map("linked_codeforces_handle")
+  linkedAtcoderUsername  String? @map("linked_atcoder_username")
+  linkedGithubUsername   String? @map("linked_github_username")
+
+  // Password reset
+  resetToken        String?   @map("reset_token")
+  resetTokenExpiry  DateTime? @map("reset_token_expiry")
+
+  // Relations
+  refreshTokens            RefreshToken[]
+  submissions              Submission[]
+  contestParticipations    UserContestParticipation[]
+  cqiScores                CqiScore[]
+  chatConversations        ChatConversation[]
+
+  @@map("users")
+}
+
+// ============================================
+// REFRESH TOKENS
+// ============================================
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// SUBMISSIONS
+// ============================================
+
+enum Platform {
+  leetcode
+  codeforces
+  atcoder
+  github
+}
+
+model Submission {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  platform    Platform
+  problemId   String   @map("problem_id")
+  problemName String   @map("problem_name")
+  verdict     String
+  language    String?
+  submittedAt DateTime @map("submitted_at")
+  scoreDelta  Float?   @map("score_delta")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform, problemId, submittedAt])
+  @@index([userId])
+  @@index([userId, platform])
+  @@index([submittedAt])
+  @@map("submissions")
+}
+
+// ============================================
+// CONTESTS
+// ============================================
+
+enum ContestStatus {
+  upcoming
+  live
+  ended
+}
+
+model Contest {
+  id        String        @id @default(cuid())
+  platform  Platform
+  name      String
+  startTime DateTime      @map("start_time")
+  endTime   DateTime      @map("end_time")
+  url       String
+  status    ContestStatus @default(upcoming)
+
+  // External platform ID for dedup
+  externalId String @map("external_id")
+
+  participations UserContestParticipation[]
+
+  @@unique([platform, externalId])
+  @@index([status])
+  @@index([startTime])
+  @@map("contests")
+}
+
+// ============================================
+// USER CONTEST PARTICIPATION
+// ============================================
+
+model UserContestParticipation {
+  id           String @id @default(cuid())
+  userId       String @map("user_id")
+  contestId    String @map("contest_id")
+  rank         Int?
+  ratingChange Int?   @map("rating_change")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contest Contest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contestId])
+  @@index([userId])
+  @@map("user_contest_participation")
+}
+
+// ============================================
+// CQI SCORES (Code Quality Index)
+// ============================================
+
+model CqiScore {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  score      Float
+  computedAt DateTime @default(now()) @map("computed_at")
+  breakdown  Json     // { consistency, difficultyWeighted, codeQuality, contestRating }
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([computedAt])
+  @@map("cqi_scores")
+}
+
+// ============================================
+// CHAT CONVERSATIONS
+// ============================================
+
+model ChatConversation {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  title     String   @default("New Chat")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    ChatMessage[]
+  attachments ChatAttachment[]
+
+  @@index([userId])
+  @@index([updatedAt])
+  @@map("chat_conversations")
+}
+
+// ============================================
+// CHAT MESSAGES
+// ============================================
+
+enum ChatRole {
+  user
+  assistant
+}
+
+model ChatMessage {
+  id             String   @id @default(cuid())
+  conversationId String   @map("conversation_id")
+  role           ChatRole
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+// ============================================
+// CHAT ATTACHMENTS
+// ============================================
+
+model ChatAttachment {
+  id                      String   @id @default(cuid())
+  conversationId          String   @map("conversation_id")
+  fileName                String   @map("file_name")
+  fileType                String   @map("file_type")
+  storageUrl              String   @map("storage_url")
+  extractedContextSummary String?  @map("extracted_context_summary")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("chat_attachments")
+}

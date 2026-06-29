@@ -1,70 +1,124 @@
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+'use client';
+
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { apiFetch } from '@/lib/api';
+import { InitialsAvatar } from '@/components/shared/initials-avatar';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Crown, Medal, Trophy } from 'lucide-react';
+import { Trophy, ArrowUpRight } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
-const leaderboardData = [
-  { rank: 1, name: 'Alex Turing', score: 4850, avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026704d' },
-  { rank: 2, name: 'Brendan Eich', score: 4700, avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026705d' },
-  { rank: 3, name: 'Grace Hopper', score: 4680, avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026706d' },
-  { rank: 4, name: 'Linus Torvalds', score: 4520, avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026707d' },
-  { rank: 5, name: 'Ada Lovelace', score: 4310, avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026708d' },
-  { rank: 6, name: 'Yukihiro Matsumoto', score: 4200, avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026709d' },
-  { rank: 7, name: 'Guido van Rossum', score: 4150, avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026710d' },
-];
-
-const RankIcon = ({ rank }: { rank: number }) => {
-  if (rank === 1) return <Trophy className="w-6 h-6 text-yellow-400" />;
-  if (rank === 2) return <Medal className="w-6 h-6 text-slate-400" />;
-  if (rank === 3) return <Crown className="w-6 h-6 text-amber-600" />;
-  return <span className="font-bold text-lg w-6 text-center">{rank}</span>;
-};
+interface LeaderboardUser {
+  id: string;
+  rank: number;
+  name: string;
+  avatarUrl: string | null;
+  score: number;
+  breakdown: any;
+}
 
 export default function LeaderboardPage() {
-  return (
-    <div className="container mx-auto py-10 px-4">
-      <header className="text-center mb-12">
-        <h1 className="font-headline text-4xl sm:text-5xl font-bold tracking-tight">Leaderboard</h1>
-        <p className="mt-4 text-lg text-muted-foreground">
-          See who's at the top of their game.
-        </p>
-      </header>
+  const [users, setUsers] = useState<LeaderboardUser[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-      <Card className="max-w-4xl mx-auto bg-card/50 border-border/50 shadow-lg shadow-primary/5 hover:shadow-primary/10 transition-shadow duration-300">
+  useEffect(() => {
+    async function loadLeaderboard() {
+      try {
+        const res = await apiFetch('/leaderboard?limit=50');
+        setUsers(res.data);
+      } catch (error) {
+        console.error('Failed to load leaderboard', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadLeaderboard();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="container py-8 mx-auto max-w-5xl">
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="font-headline text-4xl font-bold tracking-tight">Global Leaderboard</h1>
+          <p className="text-muted-foreground mt-2">Ranked by Code Quality Index (CQI)</p>
+        </div>
+        <Trophy className="h-12 w-12 text-yellow-500" />
+      </div>
+
+      <Card>
         <CardHeader>
-          <CardTitle className="font-headline">Top Programmers</CardTitle>
+          <CardTitle>Top Developers</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[100px]">Rank</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead className="text-right">Score</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {leaderboardData.map((user) => (
-                <TableRow key={user.rank} className="transition-colors hover:bg-muted/20">
-                  <TableCell>
-                    <div className="flex items-center justify-center h-full">
-                      <RankIcon rank={user.rank} />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-4">
-                      <Avatar>
-                        <AvatarImage src={user.avatar} alt={user.name} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <span className="font-medium">{user.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-mono font-bold text-lg">{user.score}</TableCell>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[100px] text-center">Rank</TableHead>
+                  <TableHead>Developer</TableHead>
+                  <TableHead className="text-right">CQI Score</TableHead>
+                  <TableHead className="w-[100px]"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                      No developers found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  users.map((user) => (
+                    <TableRow key={user.id} className="transition-colors hover:bg-muted/50">
+                      <TableCell className="text-center font-bold">
+                        {user.rank === 1 && <span className="text-yellow-500 text-lg">🥇</span>}
+                        {user.rank === 2 && <span className="text-gray-400 text-lg">🥈</span>}
+                        {user.rank === 3 && <span className="text-amber-600 text-lg">🥉</span>}
+                        {user.rank > 3 && `#${user.rank}`}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <InitialsAvatar name={user.name} />
+                          <div>
+                            <Link href={`/profile/${user.id}`} className="font-medium hover:underline hover:text-primary transition-colors">
+                              {user.name}
+                            </Link>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-bold text-primary">
+                        {Math.round(user.score).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <Link href={`/profile/${user.id}`}>
+                          <Badge variant="secondary" className="hover:bg-primary hover:text-primary-foreground cursor-pointer transition-colors">
+                            Profile <ArrowUpRight className="ml-1 h-3 w-3" />
+                          </Badge>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
