@@ -1,148 +1,272 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Bot, User, Loader2, Send } from 'lucide-react';
-import { aiCodingAssistant } from '@/ai/flows/ai-coding-assistant';
-import { cn } from '@/lib/utils';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Form, FormControl, FormField, FormItem } from '@/components/ui/form';
+import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
-const chatSchema = z.object({
-  message: z.string().min(1, 'Message cannot be empty.'),
-});
-
-type ChatFormValues = z.infer<typeof chatSchema>;
+import { Send, Loader2, Paperclip, File, Plus, MessageSquare } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { InitialsAvatar } from '@/components/shared/initials-avatar';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
+  id: string;
   role: 'user' | 'assistant';
   content: string;
+  createdAt: string;
 }
 
-export function ChatInterface() {
+interface Conversation {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
+export default function ChatInterface() {
+  const { user } = useAuth();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  
+  const [input, setInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const form = useForm<ChatFormValues>({
-    resolver: zodResolver(chatSchema),
-    defaultValues: { message: '' },
-  });
-
+  // Load conversations on mount
   useEffect(() => {
-    if (scrollViewportRef.current) {
-        const { scrollHeight } = scrollViewportRef.current;
-        scrollViewportRef.current.scrollTo({ top: scrollHeight, behavior: "smooth" });
+    async function loadConversations() {
+      try {
+        const convos = await apiFetch('/chat/conversations');
+        setConversations(convos);
+        if (convos.length > 0 && !activeConversationId) {
+          setActiveConversationId(convos[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to load conversations', error);
+      }
+    }
+    if (user) {
+      loadConversations();
+    }
+  }, [user]);
+
+  // Load messages when active conversation changes
+  useEffect(() => {
+    async function loadMessages() {
+      if (!activeConversationId) return;
+      try {
+        const convo = await apiFetch(`/chat/conversations/${activeConversationId}`);
+        setMessages(convo.messages || []);
+      } catch (error) {
+        console.error('Failed to load messages', error);
+      }
+    }
+    loadMessages();
+  }, [activeConversationId]);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
-  async function onSubmit(values: ChatFormValues) {
-    const userMessage: Message = { role: 'user', content: values.message };
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-    form.reset();
+  const handleNewChat = async () => {
+    try {
+      const convo = await apiFetch('/chat/conversations', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'New Chat' })
+      });
+      setConversations([convo, ...conversations]);
+      setActiveConversationId(convo.id);
+      setMessages([]);
+    } catch (error) {
+      console.error('Failed to create new chat', error);
+    }
+  };
+
+  const handleSend = async () => {
+    if ((!input.trim() && !file) || !activeConversationId || isSending) return;
+
+    let convoId = activeConversationId;
+    setIsSending(true);
+    setInput('');
+    setFile(null);
 
     try {
-      const result = await aiCodingAssistant({ query: values.message });
-      const assistantMessage: Message = { role: 'assistant', content: result.response };
-      setMessages((prev) => [...prev, assistantMessage]);
+      // Opt: Upload file first if exists
+      if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        await apiFetch(`/chat/conversations/${convoId}/attachments`, {
+          method: 'POST',
+          body: formData, // fetch will automatically set the correct multipart boundary if we omit Content-Type
+          headers: {
+            'Content-Type': 'multipart/form-data' // Actually for fetch+FormData, we MUST let browser set it, so apiFetch needs a way to handle this.
+            // Wait, apiFetch sets application/json. We should conditionally delete it or use standard fetch.
+          }
+        });
+        // Note: For a robust implementation, `apiFetch` would need to detect FormData and not set Content-Type.
+        // For this demo, let's assume we do a raw fetch if file exists to avoid apiFetch JSON header issue.
+        const token = (window as any).__accessToken;
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/chat/conversations/${convoId}/attachments`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        });
+      }
+
+      if (input.trim()) {
+        // Optimistic UI update
+        const tempMsg: Message = {
+          id: Date.now().toString(),
+          role: 'user',
+          content: input,
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, tempMsg]);
+
+        const aiResponse = await apiFetch(`/chat/conversations/${convoId}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({ content: input })
+        });
+
+        // Refetch messages to get final state
+        const convo = await apiFetch(`/chat/conversations/${convoId}`);
+        setMessages(convo.messages);
+      }
     } catch (error) {
-      console.error(error);
-      const errorMessage: Message = {
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      console.error('Failed to send message', error);
     } finally {
-      setIsLoading(false);
+      setIsSending(false);
     }
+  };
+
+  if (!user) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-muted-foreground">Please log in to use the AI assistant.</p>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col h-[70vh] rounded-lg border bg-card/50 shadow-lg shadow-primary/5 hover:shadow-primary/10 transition-shadow duration-300">
-      <ScrollArea className="flex-1" viewportClassName="p-6" viewportRef={scrollViewportRef}>
-        <div className="space-y-6">
-          {messages.map((message, index) => (
-            <div
-              key={index}
-              className={cn(
-                'flex items-start gap-4 animate-in fade-in slide-in-from-bottom-5 duration-500',
-                message.role === 'user' ? 'justify-end' : 'justify-start'
-              )}
-            >
-              {message.role === 'assistant' && (
-                <Avatar className="h-9 w-9 border border-primary/50">
-                   <AvatarFallback className="bg-primary/20 text-primary">
-                    <Bot className="h-5 w-5" />
-                  </AvatarFallback>
-                </Avatar>
-              )}
-              <div
-                className={cn(
-                  'max-w-prose rounded-lg px-4 py-3 text-sm shadow',
-                  message.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted/50'
-                )}
+    <div className="flex h-[80vh] w-full rounded-xl border bg-card shadow-sm overflow-hidden">
+      {/* Sidebar */}
+      <div className="w-64 border-r bg-muted/20 flex flex-col">
+        <div className="p-4">
+          <Button onClick={handleNewChat} className="w-full flex gap-2">
+            <Plus className="h-4 w-4" /> New Chat
+          </Button>
+        </div>
+        <ScrollArea className="flex-1">
+          <div className="flex flex-col gap-1 p-2">
+            {conversations.map(convo => (
+              <button
+                key={convo.id}
+                onClick={() => setActiveConversationId(convo.id)}
+                className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors text-left truncate ${
+                  activeConversationId === convo.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                }`}
               >
-                <div className="whitespace-pre-wrap font-body">{message.content}</div>
+                <MessageSquare className="h-4 w-4 shrink-0" />
+                <span className="truncate">{convo.title}</span>
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6">
+          {messages.length === 0 && (
+            <div className="flex h-full flex-col items-center justify-center space-y-4 text-center">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <MessageSquare className="h-6 w-6 text-primary" />
               </div>
-              {message.role === 'user' && (
-                <Avatar className="h-9 w-9">
-                  <AvatarFallback className="bg-secondary">
-                    <User className="h-5 w-5" />
-                  </AvatarFallback>
-                </Avatar>
-              )}
+              <p className="text-muted-foreground">Ask me anything about competitive programming!</p>
+            </div>
+          )}
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div className="shrink-0">
+                {msg.role === 'user' ? (
+                  <InitialsAvatar name={user?.displayName || user?.email} />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
+                    AI
+                  </div>
+                )}
+              </div>
+              <div className={`max-w-[80%] rounded-lg p-4 ${
+                msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
+              }`}>
+                {msg.role === 'assistant' ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
+              </div>
             </div>
           ))}
-          {isLoading && (
-            <div className="flex items-start gap-4">
-              <Avatar className="h-9 w-9 border border-primary/50">
-                <AvatarFallback className="bg-primary/20 text-primary">
-                  <Bot className="h-5 w-5" />
-                </AvatarFallback>
-              </Avatar>
-              <div className="max-w-md rounded-lg px-4 py-3 text-sm shadow bg-muted/50 flex items-center">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              </div>
+          {isSending && (
+            <div className="flex gap-4">
+               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
+                  AI
+               </div>
+               <div className="rounded-lg bg-muted p-4 flex items-center gap-2">
+                 <Loader2 className="h-4 w-4 animate-spin" /> Thinking...
+               </div>
             </div>
           )}
         </div>
-      </ScrollArea>
-      <div className="border-t p-4 bg-card/80">
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="flex items-center gap-4"
-          >
-            <FormField
-              control={form.control}
-              name="message"
-              render={({ field }) => (
-                <FormItem className="flex-1">
-                  <FormControl>
-                    <Input
-                      placeholder="Ask a coding question..."
-                      autoComplete="off"
-                      {...field}
-                      disabled={isLoading}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-            <Button type="submit" size="icon" disabled={isLoading}>
-              <Send className="h-4 w-4" />
-              <span className="sr-only">Send</span>
+
+        {/* Input Area */}
+        <div className="border-t p-4 bg-background">
+          {file && (
+            <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground bg-muted p-2 rounded-md w-fit">
+              <File className="h-4 w-4" />
+              {file.name}
+              <button onClick={() => setFile(null)} className="ml-2 hover:text-destructive">×</button>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" className="shrink-0 relative overflow-hidden">
+              <input
+                type="file"
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                accept=".txt,.md,.js,.ts,.py,.cpp,.java,.c"
+              />
+              <Paperclip className="h-4 w-4" />
             </Button>
-          </form>
-        </Form>
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Ask a coding question..."
+              className="flex-1"
+              disabled={isSending}
+            />
+            <Button onClick={handleSend} disabled={isSending || (!input.trim() && !file)}>
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

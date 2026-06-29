@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Code2, LogOut, Menu } from 'lucide-react';
-import { useUser, useAuth } from '@/firebase';
+import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -20,14 +20,11 @@ const navItems = [
 
 export default function Header() {
   const pathname = usePathname();
-  const { user, isUserLoading } = useUser();
-  const auth = useAuth();
+  const { user, isLoading: isUserLoading, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    if (auth) {
-      auth.signOut();
-    }
+    logout();
   };
 
   const NavLinks = () => (

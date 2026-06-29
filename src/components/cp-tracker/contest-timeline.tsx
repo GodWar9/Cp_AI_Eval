@@ -1,139 +1,144 @@
 'use client';
 
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Bell, Calendar, Clock, ExternalLink } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
-import Link from 'next/link';
+import { Bell, ExternalLink, Calendar as CalendarIcon, Loader2 } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
+import { useSocket } from '@/context/SocketContext';
 
-const upcomingContests = [
-  {
-    id: 1,
-    name: 'Codeforces Round 962 (Div. 3)',
-    platform: 'Codeforces',
-    startTime: '2024-08-01T14:35:00Z',
-    duration: '2h 15m',
-    url: 'https://codeforces.com/contests',
-  },
-  {
-    id: 2,
-    name: 'Weekly Contest 405',
-    platform: 'LeetCode',
-    startTime: '2024-08-03T02:30:00Z',
-    duration: '1h 30m',
-    url: 'https://leetcode.com/contest/',
-  },
-  {
-    id: 3,
-    name: 'AtCoder Beginner Contest 364',
-    platform: 'AtCoder',
-    startTime: '2024-08-03T12:00:00Z',
-    duration: '1h 40m',
-    url: 'https://atcoder.jp/contests',
-  },
-  {
-    id: 4,
-    name: 'Codeforces Round 963 (Div. 2)',
-    platform: 'Codeforces',
-    startTime: '2024-08-05T14:35:00Z',
-    duration: '2h',
-    url: 'https://codeforces.com/contests',
-  },
-    {
-    id: 5,
-    name: 'Biweekly Contest 136',
-    platform: 'LeetCode',
-    startTime: '2024-08-10T14:30:00Z',
-    duration: '1h 30m',
-    url: 'https://leetcode.com/contest/',
-  },
-];
+interface Contest {
+  id: string;
+  name: string;
+  platform: 'codeforces' | 'leetcode' | 'atcoder';
+  status: 'upcoming' | 'live' | 'ended';
+  startTime: string;
+  url: string;
+}
 
-export function ContestTimeline() {
-  const [reminderContest, setReminderContest] = useState<string | null>(null);
+export default function ContestTimeline() {
+  const [contests, setContests] = useState<Contest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { socket, isConnected } = useSocket();
 
-  const handleSetReminder = (contestName: string) => {
-    setReminderContest(contestName);
-  };
+  useEffect(() => {
+    async function loadContests() {
+      try {
+        const data = await apiFetch('/contests');
+        setContests(data);
+      } catch (error) {
+        console.error('Failed to load contests', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadContests();
+  }, []);
 
-  return (
-    <>
-      <Card className="h-full">
+  useEffect(() => {
+    if (!socket) return;
+    
+    // Listen for WebSocket updates to contest statuses
+    socket.on('contest:update', (updatedContest: Contest) => {
+      setContests(prev => {
+        const existing = prev.findIndex(c => c.id === updatedContest.id);
+        if (existing >= 0) {
+          const newContests = [...prev];
+          newContests[existing] = updatedContest;
+          return newContests;
+        } else {
+          return [updatedContest, ...prev].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        }
+      });
+    });
+
+    return () => {
+      socket.off('contest:update');
+    };
+  }, [socket]);
+
+  // Filter out older ended contests for the sidebar
+  const displayContests = contests
+    .filter(c => c.status !== 'ended' || new Date(c.startTime).getTime() > Date.now() - 3 * 24 * 60 * 60 * 1000)
+    .slice(0, 10);
+
+  if (isLoading) {
+    return (
+      <Card>
         <CardHeader>
-          <CardTitle className="font-headline">Upcoming Contests</CardTitle>
-          <CardDescription>Stay ahead of the competition.</CardDescription>
+          <CardTitle>Upcoming Contests</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="relative space-y-8 pl-6 before:absolute before:inset-y-0 before:w-0.5 before:bg-border before:left-0">
-            {upcomingContests.map((contest, index) => {
-                const startTime = parseISO(contest.startTime);
-                return (
-                    <div key={contest.id} className="relative">
-                         <div className="absolute left-[-2.2rem] top-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                             <Calendar className="h-4 w-4" />
-                         </div>
-                        <Card className="bg-card/50 hover:border-primary/50 transition-colors">
-                            <CardHeader className="pb-4">
-                                <CardTitle className="text-lg font-semibold flex justify-between items-start">
-                                    <span>{contest.name}</span>
-                                    <Link href={contest.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
-                                        <ExternalLink className="h-4 w-4" />
-                                    </Link>
-                                </CardTitle>
-                                <CardDescription>{contest.platform}</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="text-sm text-muted-foreground space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <Calendar className="h-4 w-4"/>
-                                        <span>{format(startTime, 'MMMM d, yyyy')}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <Clock className="h-4 w-4"/>
-                                        <span>{format(startTime, 'p')} ({contest.duration})</span>
-                                    </div>
-                                </div>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full"
-                                    onClick={() => handleSetReminder(contest.name)}
-                                >
-                                    <Bell className="mr-2 h-4 w-4" />
-                                    Set Reminder
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )
-            })}
-          </div>
+        <CardContent className="flex justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </CardContent>
       </Card>
-      
-      <AlertDialog open={!!reminderContest} onOpenChange={() => setReminderContest(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reminder Set!</AlertDialogTitle>
-            <AlertDialogDescription>
-              We'll notify you before the "{reminderContest}" contest begins. Good luck!
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setReminderContest(null)}>OK</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>Upcoming Contests</CardTitle>
+          {isConnected && <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="Live updates active" />}
+        </div>
+        <CardDescription>Live schedule from all platforms</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-6">
+          {displayContests.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No upcoming contests found.</p>
+          ) : (
+            displayContests.map((contest, i) => (
+              <div key={i} className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${
+                    contest.status === 'live' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' : 
+                    contest.status === 'upcoming' ? 'border-primary bg-primary/10 text-primary' : 
+                    'border-muted bg-muted text-muted-foreground'
+                  }`}>
+                    <CalendarIcon className="h-4 w-4" />
+                  </div>
+                  {i !== displayContests.length - 1 && (
+                    <div className="w-px h-full bg-border my-2" />
+                  )}
+                </div>
+                
+                <div className="flex flex-col gap-2 pb-6">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium leading-tight">{contest.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-sm capitalize text-muted-foreground">{contest.platform}</span>
+                        {contest.status === 'live' && (
+                          <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600">LIVE</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-sm text-muted-foreground">
+                    {new Date(contest.startTime).toLocaleString(undefined, {
+                      weekday: 'short', month: 'short', day: 'numeric',
+                      hour: 'numeric', minute: '2-digit'
+                    })}
+                  </div>
+                  
+                  <div className="flex gap-2 mt-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <a href={contest.url} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="mr-2 h-3 w-3" />
+                        View
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
